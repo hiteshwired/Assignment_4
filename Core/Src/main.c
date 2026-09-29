@@ -15,35 +15,51 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
-/* Includes ------------------------------------------------------------------*/
+  /******************************************************************************
+ * main.c
+ *
+ * CPE 316 - Assignment 4
+ * Interrupts and Timers
+ *
+ * Generates a 5 kHz, 25% duty-cycle square wave using TIM2.
+ ******************************************************************************/
+
+#include "stm32l476xx.h"
+#include "a4_gpio.h"
+#include "a4_timer.h"
 #include "main.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
+int main(void)
+{
+    /*
+     * Assumption for A4:
+     *
+     * System / TIM2 clock is configured as required by the
+     * assignment (4 MHz).
+     */
 
-/* USER CODE END Includes */
+    A4_GPIO_init();
 
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
+    A4_TIM2_init();
 
-/* USER CODE END PTD */
+    A4_TIM2_start();
 
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
 
-/* USER CODE END PD */
+    while (1)
+    {
+        /*
+         * Intentionally empty.
+         *
+         * TIM2 hardware and TIM2_IRQHandler() generate the waveform.
+         *
+         * DO NOT:
+         *   - increment counters here
+         *   - use software delays here
+         *   - poll CNT to determine waveform timing
+         */
+    }
+}
 
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
