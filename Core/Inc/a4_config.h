@@ -27,22 +27,28 @@
 /*
  * Number of TIM2 counter ticks in one output period.
  *
- * TODO:
- * Verify this calculation manually for your report.
+ * f_out = f_TIM / A4_PERIOD_TICKS
+ *   -> A4_PERIOD_TICKS = 4 MHz / 5 kHz = 800 ticks
+ *
+ * 5 kHz period  = 200 us  (800 ticks @ 250 ns/tick)
+ * 25% high time =  50 us  (200 ticks)
+ * 75% low time  = 150 us  (600 ticks)
  */
 #define A4_PERIOD_TICKS        \
     (A4_TIMER_CLOCK_HZ / A4_OUTPUT_FREQ_HZ)
 
 /*
- * TIM2 counts from 0 through ARR, inclusive.
+ * TIM2 counts 0, 1, ... ARR, then wraps (an update event) back to 0.
+ * That is (ARR + 1) counts per period, so subtract 1 to include count 0.
  *
- * TODO:
- * Complete this definition.
+ *   ARR = A4_PERIOD_TICKS - 1 = 800 - 1 = 799
  */
-#define A4_TIM2_ARR            (/* TODO */)
+#define A4_TIM2_ARR            (A4_PERIOD_TICKS - 1UL)
 
 /*
  * Number of timer ticks corresponding to the high portion.
+ *
+ *   A4_HIGH_TICKS = (800 * 25) / 100 = 200 ticks
  */
 #define A4_HIGH_TICKS          \
     ((A4_PERIOD_TICKS * A4_DUTY_PERCENT) / 100UL)
@@ -50,13 +56,14 @@
 /*
  * Compare value used to generate the duty-cycle transition.
  *
- * TODO:
- * Determine the appropriate CCR1 value based on exactly when
- * your ISR drives the output HIGH and LOW.
+ * The ISR drives the pin HIGH on the update event (count 0, start of
+ * period) and LOW on the CCR1 compare event. Counting count 0 as the
+ * first HIGH tick, the pin stays HIGH for counts 0 .. (A4_HIGH_TICKS - 1)
+ * and the CC1IF that fires at CNT == A4_HIGH_TICKS ends the HIGH portion.
  *
- * Pay special attention to the lab hint about counting zero.
+ *   CCR1 = A4_HIGH_TICKS = 200  ->  HIGH for 200 ticks, LOW for 600 ticks
  */
-#define A4_TIM2_CCR1           (/* TODO */)
+#define A4_TIM2_CCR1           (A4_HIGH_TICKS)
 
 
 /*===========================================================================

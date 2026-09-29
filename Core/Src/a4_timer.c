@@ -56,9 +56,11 @@ void A4_TIM2_init(void)
      * Timer counter clock:
      *
      *      f_CNT = f_TIM / (PSC + 1)
+     *
+     * We want f_CNT = f_TIM = 4 MHz, so PSC + 1 = 1  ->  PSC = 0.
      *------------------------------------------------------------*/
 
-    TIM2->PSC = /* TODO */;
+    TIM2->PSC = 0U;
 
 
     /*--------------------------------------------------------------
@@ -136,10 +138,13 @@ void A4_TIM2_start(void)
      */
     TIM2->CNT = 0U;
 
-    /* TODO:
-     * Decide whether the GPIO should initially be HIGH or LOW,
-     * based on how you designed the ISR below.
+    /*
+     * The ISR drives the pin HIGH on the update event and LOW on the
+     * CCR1 compare event. The first update event happens one full period
+     * after the counter starts, so pre-set the pin HIGH here to begin the
+     * very first period in the correct state (HIGH from count 0).
      */
+    A4_GPIO_set_output();
 
     TIM2->CR1 |= TIM_CR1_CEN;
 }
@@ -170,13 +175,10 @@ void TIM2_IRQHandler(void)
     if ((TIM2->SR & TIM_SR_UIF) != 0U)
     {
         /*
-         * TODO:
-         * Should the output become HIGH or LOW here?
-         *
-         * Draw the waveform before answering.
+         * Start of a new period (count wrapped 799 -> 0):
+         * begin the HIGH portion of the waveform.
          */
-
-        /* A4_GPIO_???(); */
+        A4_GPIO_set_output();
 
         TIM2->SR &= ~TIM_SR_UIF;
     }
@@ -188,11 +190,10 @@ void TIM2_IRQHandler(void)
     if ((TIM2->SR & TIM_SR_CC1IF) != 0U)
     {
         /*
-         * TODO:
-         * Perform the opposite GPIO transition here.
+         * Reached CCR1 (count 200) inside the period:
+         * end the HIGH portion / begin the LOW portion.
          */
-
-        /* A4_GPIO_???(); */
+        A4_GPIO_clear_output();
 
         TIM2->SR &= ~TIM_SR_CC1IF;
     }
