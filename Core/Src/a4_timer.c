@@ -1,200 +1,89 @@
-/******************************************************************************
+/*
  * a4_timer.c
  *
- * Configures TIM2 to generate the timing events needed for a
- * 5 kHz, 25% duty-cycle GPIO waveform.
+ * CPE 316 - Assignment 4, Part A
+ * Sets up TIM2 to make a 5 kHz, 25% duty cycle square wave.
  *
- * Two TIM2 events are used:
+ * TIM2 sends two interrupts each period:
+ *   update event (count rolls over) -> set the pin high
+ *   CCR1 compare match              -> set the pin low
  *
- *   Update event:
- *       Marks the beginning of a new waveform period.
- *
- *   Channel 1 compare event:
- *       Marks the duty-cycle transition within the period.
- ******************************************************************************/
+ * Functions:
+ *   TIM2_init()       - configure the timer and its interrupts
+ *   TIM2_start()      - start counting
+ *   TIM2_stop()       - stop counting
+ *   TIM2_IRQHandler() - toggles the pin and clears the flags
+ */
 
 #include "a4_timer.h"
 #include "a4_gpio.h"
 #include "a4_config.h"
 
-
-void A4_TIM2_init(void)
+void TIM2_init(void)
 {
-    /*--------------------------------------------------------------
-     * 1. Enable TIM2 peripheral clock
-     *------------------------------------------------------------*/
-
+    // turn on the TIM2 clock (APB1)
     RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
 
-
-    /*--------------------------------------------------------------
-     * 2. Stop timer while configuring it
-     *------------------------------------------------------------*/
-
+    // make sure the timer is off while we set it up
     TIM2->CR1 &= ~TIM_CR1_CEN;
 
-
-    /*--------------------------------------------------------------
-     * 3. Configure TIM2 as an up-counter
-     *
-     * DIR = 0 : up-counting
-     * CMS = 00: edge-aligned counting
-     *------------------------------------------------------------*/
-
+    // up-counting, edge-aligned
     TIM2->CR1 &= ~TIM_CR1_DIR;
     TIM2->CR1 &= ~TIM_CR1_CMS;
 
-
-    /*--------------------------------------------------------------
-     * 4. Configure prescaler
-     *
-     * The assignment says TIM2 receives a 4 MHz clock.
-     *
-     * We want the counter itself to run at that rate, so determine
-     * what PSC must contain.
-     *
-     * Timer counter clock:
-     *
-     *      f_CNT = f_TIM / (PSC + 1)
-     *
-     * We want f_CNT = f_TIM = 4 MHz, so PSC + 1 = 1  ->  PSC = 0.
-     *------------------------------------------------------------*/
-
+    // PSC = 0 so the counter runs at the full 4 MHz clock
     TIM2->PSC = 0U;
 
+    // ARR sets the period, CCR1 sets the 25% high time
+    TIM2->ARR  = TIM2_ARR_VAL;
+    TIM2->CCR1 = TIM2_CCR1_VAL;
 
-    /*--------------------------------------------------------------
-     * 5. Configure period
-     *------------------------------------------------------------*/
-
-    TIM2->ARR = A4_TIM2_ARR;
-
-
-    /*--------------------------------------------------------------
-     * 6. Configure channel 1 compare event
-     *
-     * When CNT reaches CCR1, CC1IF will be asserted.
-     *------------------------------------------------------------*/
-
-    TIM2->CCR1 = A4_TIM2_CCR1;
-
-
-    /*--------------------------------------------------------------
-     * 7. Enable TIM2 interrupt sources
-     *
-     * We need:
-     *
-     * UIE   -> interrupt when one period completes
-     * CC1IE -> interrupt when CNT reaches CCR1
-     *------------------------------------------------------------*/
-
+    // enable the update and CCR1 compare interrupts
     TIM2->DIER |= TIM_DIER_UIE;
     TIM2->DIER |= TIM_DIER_CC1IE;
 
-
-    /*--------------------------------------------------------------
-     * 8. Force register update
-     *
-     * UG transfers prescaler / reload configuration into use.
-     *
-     * NOTE:
-     * Generating UG can also cause UIF to become set, so we must
-     * clear pending timer flags before enabling the NVIC interrupt.
-     *------------------------------------------------------------*/
-
+    // UG loads PSC/ARR right away, but it also sets UIF
     TIM2->EGR |= TIM_EGR_UG;
 
-
-    /*--------------------------------------------------------------
-     * 9. Clear stale interrupt flags
-     *------------------------------------------------------------*/
-
+    // clear any flags left over from the UG event
     TIM2->SR &= ~TIM_SR_UIF;
     TIM2->SR &= ~TIM_SR_CC1IF;
 
-
-    /*--------------------------------------------------------------
-     * 10. Enable TIM2 interrupt in the NVIC
-     *
-     * TIM2_IRQn identifies TIM2's Cortex-M4 interrupt number.
-     *
-     * Complete the appropriate NVIC enable operation.
-     *------------------------------------------------------------*/
-
-    NVIC->ISER[TIM2_IRQn >> 5] =
-        (1UL << (TIM2_IRQn & 0x1FU));
-
-
-    /* Global Cortex-M4 interrupts. */
+    // enable TIM2 in the NVIC, then enable interrupts globally
+    NVIC->ISER[TIM2_IRQn >> 5] = (1UL << (TIM2_IRQn & 0x1FU));
     __enable_irq();
 }
 
-
-void A4_TIM2_start(void)
+void TIM2_start(void)
 {
-    /*
-     * Starting from a known counter value makes the initial
-     * waveform behavior deterministic.
-     */
-    TIM2->CNT = 0U;
+    TIM2->CNT = 0U;        // start from a known count
 
-    /*
-     * The ISR drives the pin HIGH on the update event and LOW on the
-     * CCR1 compare event. The first update event happens one full period
-     * after the counter starts, so pre-set the pin HIGH here to begin the
-     * very first period in the correct state (HIGH from count 0).
-     */
-    A4_GPIO_set_output();
+    // The first update event is a full period away, so set the pin
+    // high now so the very first period starts high.
+    GPIO_set_output();
 
     TIM2->CR1 |= TIM_CR1_CEN;
 }
 
-
-void A4_TIM2_stop(void)
+void TIM2_stop(void)
 {
     TIM2->CR1 &= ~TIM_CR1_CEN;
 }
 
-
-/******************************************************************************
- * TIM2_IRQHandler
- *
- * TIM2 interrupt service routine.
- *
- * Keep this ISR SHORT:
- *   1. Determine interrupt source.
- *   2. Update output pin.
- *   3. Clear the corresponding interrupt flag.
- ******************************************************************************/
-
+// check the source, flip the pin, clear the flag.
 void TIM2_IRQHandler(void)
 {
-    /*
-     * Period boundary.
-     */
+    // update event -> start of a new period, go high
     if ((TIM2->SR & TIM_SR_UIF) != 0U)
     {
-        /*
-         * Start of a new period (count wrapped 799 -> 0):
-         * begin the HIGH portion of the waveform.
-         */
-        A4_GPIO_set_output();
-
+        GPIO_set_output();
         TIM2->SR &= ~TIM_SR_UIF;
     }
 
-
-    /*
-     * CCR1 compare event.
-     */
+    // CCR1 match -> end of the high time, go low
     if ((TIM2->SR & TIM_SR_CC1IF) != 0U)
     {
-        /*
-         * Reached CCR1 (count 200) inside the period:
-         * end the HIGH portion / begin the LOW portion.
-         */
-        A4_GPIO_clear_output();
-
+        GPIO_clear_output();
         TIM2->SR &= ~TIM_SR_CC1IF;
     }
 }

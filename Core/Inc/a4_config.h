@@ -1,11 +1,14 @@
-/******************************************************************************
+/*
  * a4_config.h
  *
- * Configuration constants for CPE 316 Assignment 4.
+ * CPE 316 - Assignment 4, Part A
+ * Constants for the 5 kHz, 25% duty cycle square wave on TIM2.
  *
- * Assignment:
- *   Generate a 5 kHz, 25% duty-cycle square wave using TIM2 interrupts.
- ******************************************************************************/
+ * Timing math (4 MHz timer clock, 250 ns per tick):
+ *   period = 4 MHz / 5 kHz = 800 ticks = 200 us
+ *   high   = 25% of 800    = 200 ticks =  50 us
+ *   low    = 75% of 800    = 600 ticks = 150 us
+ */
 
 #ifndef A4_CONFIG_H
 #define A4_CONFIG_H
@@ -13,70 +16,35 @@
 #include "stm32l476xx.h"
 #include <stdint.h>
 
-/*===========================================================================
- * Timer configuration
- *===========================================================================*/
+// TIM2 input clock and the wave we want to make
+#define TIMER_CLOCK_HZ   (4000000UL)   // 4 MHz timer clock
+#define OUTPUT_FREQ_HZ   (5000UL)      // 5 kHz output
+#define DUTY_PERCENT     (25UL)        // 25% duty cycle
 
-/* A4 specifies a 4 MHz timer input clock. */
-#define A4_TIMER_CLOCK_HZ      (4000000UL)
-
-/* Required output waveform. */
-#define A4_OUTPUT_FREQ_HZ      (5000UL)
-#define A4_DUTY_PERCENT        (25UL)
+// ticks in one full period: 4 MHz / 5 kHz = 800
+#define PERIOD_TICKS     (TIMER_CLOCK_HZ / OUTPUT_FREQ_HZ)
 
 /*
- * Number of TIM2 counter ticks in one output period.
- *
- * f_out = f_TIM / A4_PERIOD_TICKS
- *   -> A4_PERIOD_TICKS = 4 MHz / 5 kHz = 800 ticks
- *
- * 5 kHz period  = 200 us  (800 ticks @ 250 ns/tick)
- * 25% high time =  50 us  (200 ticks)
- * 75% low time  = 150 us  (600 ticks)
+ * The counter runs 0, 1, ... ARR and then rolls over, so that is
+ * (ARR + 1) counts per period. Subtract 1 so count 0 is included.
+ * ARR = 800 - 1 = 799
  */
-#define A4_PERIOD_TICKS        \
-    (A4_TIMER_CLOCK_HZ / A4_OUTPUT_FREQ_HZ)
+#define TIM2_ARR_VAL     (PERIOD_TICKS - 1UL)
+
+// ticks the pin stays high: 800 * 25 / 100 = 200
+#define HIGH_TICKS       ((PERIOD_TICKS * DUTY_PERCENT) / 100UL)
 
 /*
- * TIM2 counts 0, 1, ... ARR, then wraps (an update event) back to 0.
- * That is (ARR + 1) counts per period, so subtract 1 to include count 0.
- *
- *   ARR = A4_PERIOD_TICKS - 1 = 800 - 1 = 799
+ * The pin is set high at the update event (count 0) and cleared at the
+ * CCR1 compare match. Matching at count 200 gives 200 high ticks
+ * (counts 0..199), which is the 25% high time.
+ * CCR1 = 200
  */
-#define A4_TIM2_ARR            (A4_PERIOD_TICKS - 1UL)
+#define TIM2_CCR1_VAL    (HIGH_TICKS)
 
-/*
- * Number of timer ticks corresponding to the high portion.
- *
- *   A4_HIGH_TICKS = (800 * 25) / 100 = 200 ticks
- */
-#define A4_HIGH_TICKS          \
-    ((A4_PERIOD_TICKS * A4_DUTY_PERCENT) / 100UL)
-
-/*
- * Compare value used to generate the duty-cycle transition.
- *
- * The ISR drives the pin HIGH on the update event (count 0, start of
- * period) and LOW on the CCR1 compare event. Counting count 0 as the
- * first HIGH tick, the pin stays HIGH for counts 0 .. (A4_HIGH_TICKS - 1)
- * and the CC1IF that fires at CNT == A4_HIGH_TICKS ends the HIGH portion.
- *
- *   CCR1 = A4_HIGH_TICKS = 200  ->  HIGH for 200 ticks, LOW for 600 ticks
- */
-#define A4_TIM2_CCR1           (A4_HIGH_TICKS)
-
-
-/*===========================================================================
- * Output GPIO
- *===========================================================================*/
-
-/*
- * PC0 is used here simply as a convenient GPIO output.
- *
- * Change these definitions if you choose another pin.
- */
-#define A4_OUTPUT_GPIO         GPIOC
-#define A4_OUTPUT_PIN          (0UL)
-#define A4_OUTPUT_MASK         (1UL << A4_OUTPUT_PIN)
+// Output pin - using PC0 as a free GPIO output
+#define OUTPUT_PORT      GPIOC
+#define OUTPUT_PIN       (0UL)
+#define OUTPUT_MASK      (1UL << OUTPUT_PIN)
 
 #endif

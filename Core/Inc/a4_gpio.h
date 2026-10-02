@@ -1,16 +1,17 @@
-/******************************************************************************
+/*
  * a4_gpio.h
  *
- * GPIO interface for CPE 316 Assignment 4.
- ******************************************************************************/
+ * CPE 316 - Assignment 4
+ * Declarations for the waveform output pin functions in a4_gpio.c.
+ */
 
 #ifndef A4_GPIO_H
 #define A4_GPIO_H
 
 #include "stm32l476xx.h"
 
-void A4_GPIO_init(void);
-void A4_GPIO_set_output(void);
-void A4_GPIO_clear_output(void);
+void GPIO_init(void);          // set up the output pin
+void GPIO_set_output(void);    // drive the pin high
+void GPIO_clear_output(void);  // drive the pin low
 
 #endif
